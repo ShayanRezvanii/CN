@@ -1,8 +1,10 @@
+// src/components/AuthModal.tsx
 import React, { useState } from 'react';
-import { Modal, View, Text } from 'react-native';
+import { Modal, View, Text, Alert } from 'react-native';
 import { setToken } from '../../lib/Auth/auth';
 import Button from '../ui/button';
 import Input from '../ui/input';
+import { useAuth } from '../../context/AuthContext';
 
 type Props = {
   visible: boolean;
@@ -13,11 +15,40 @@ type Props = {
 export default function AuthModal({ visible, onClose, onSuccess }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { loadRole } = useAuth();
 
   const login = async () => {
-    await setToken('demo_token');
-    onSuccess();
-    onClose();
+    try {
+      setLoading(true);
+
+      const res = await fetch(
+        'https://no-ai-7f4bb5f0d7ab.herokuapp.com/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        },
+      );
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Login failed');
+      }
+
+      const data = await res.json();
+
+      await setToken(data.token);
+
+      await loadRole();
+      onSuccess();
+
+      onClose();
+    } catch (err: any) {
+      Alert.alert('Login Failed', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -37,7 +68,7 @@ export default function AuthModal({ visible, onClose, onSuccess }: Props) {
             <View>
               <Input
                 placeholder="Email"
-                value={email}
+                value={email.toLowerCase()}
                 onChangeText={setEmail}
               />
               <Input
@@ -50,7 +81,12 @@ export default function AuthModal({ visible, onClose, onSuccess }: Props) {
 
             <View className=" max-w-[420px] flex justify-center items-center">
               <View className="flex-col gap-3 w-full">
-                <Button title="Login" variant="primary" onPress={login} />
+                <Button
+                  title={loading ? 'Loading...' : 'Login'}
+                  variant="primary"
+                  onPress={login}
+                  // disabled={loading}
+                />
                 <Button title="Cancel" variant="secondary" onPress={onClose} />
               </View>
             </View>

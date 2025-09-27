@@ -1,4 +1,9 @@
 {
   "name": "CnProject",
-  "displayName": "CnProject"
+  "displayName": "CnProject",
+  "extra": {
+    "eas": {
+      "projectId": "05ecc9fc-3593-4a28-81cf-8106777b1a77"
+    }
+  }
 }

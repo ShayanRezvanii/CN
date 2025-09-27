@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+// src/screens/ChatScreen.tsx
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { getToken } from '../lib/Auth/auth';
-
 import AuthModal from '../components/Modals/AuthModal';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
@@ -24,12 +25,37 @@ type Msg = {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chat'>;
 
-export default function ChatScreen({ route }: Props) {
-  const { topic } = route.params;
+export default function ChatScreen({ route, navigation }: Props) {
+  const { roomId, topic } = route.params;
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState('');
   const [authVisible, setAuthVisible] = useState(false);
 
+  const fetchMessages = async () => {
+    const token = await getToken();
+    if (!token) {
+      setAuthVisible(true);
+      return;
+    }
+
+    const res = await fetch(
+      `https://no-ai-7f4bb5f0d7ab.herokuapp.com//rooms/${roomId}/messages`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    if (!res.ok) return;
+    const data = await res.json();
+    setMessages(data);
+  };
+
+  // گرفتن پیام‌ها وقتی صفحه باز میشه
+  useEffect(() => {
+    fetchMessages();
+  }, [roomId]);
+
+  // ارسال پیام
   const send = async () => {
     if (!text.trim()) return;
 
@@ -39,24 +65,52 @@ export default function ChatScreen({ route }: Props) {
       return;
     }
 
-    // پیام یوزر
-    const userMsg: Msg = {
-      id: Math.random().toString(),
-      content: text.trim(),
-      createdAt: new Date().toISOString(),
-      from: 'user',
-    };
+    const res = await fetch(
+      `https://no-ai-7f4bb5f0d7ab.herokuapp.com/rooms/${roomId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content: text }),
+      },
+    );
 
-    // پیام مشاور (fake)
-    const consultantMsg: Msg = {
-      id: Math.random().toString(),
-      content: 'Hi, how can I help you?',
-      createdAt: new Date().toISOString(),
-      from: 'consultant',
-    };
+    if (!res.ok) {
+      const err = await res.json();
+      console.error('Send msg failed:', err);
+      return;
+    }
 
-    setMessages(prev => [...prev, userMsg, consultantMsg]);
+    const newMsg = await res.json(); // همون userMsg
+    setMessages(prev => [...prev, newMsg]); // بلافاصله نشون بده
     setText('');
+
+    // بعد از فرستادن، کل لیست پیام‌ها رو sync کن
+    fetchMessages();
+  };
+
+  const endChat = async () => {
+    const token = await getToken();
+    if (!token) {
+      setAuthVisible(true);
+      return;
+    }
+
+    const res = await fetch(
+      `https://no-ai-7f4bb5f0d7ab.herokuapp.com/rooms/${roomId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+
+    if (res.ok) {
+      navigation.goBack(); // برگرد به Topics
+    }
   };
 
   const renderItem = ({ item }: { item: Msg }) => (
@@ -93,6 +147,10 @@ export default function ChatScreen({ route }: Props) {
       className="flex-1 px-6 mb-12 "
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <Text className="text-center text-lg font-bold text-[#FEA405] mt-4">
+        {topic}
+      </Text>
+
       <FlatList
         data={messages}
         keyExtractor={m => m.id}
@@ -101,6 +159,12 @@ export default function ChatScreen({ route }: Props) {
         contentContainerStyle={{ paddingBottom: 8 }}
       />
 
+      <Pressable
+        onPress={endChat}
+        className="py-2 px-4 rounded-lg self-center mt-2 mb-4"
+      >
+        <Text className="text-red-600 font-bold">End Chat</Text>
+      </Pressable>
       <View className="flex-row items-center border border-neutral-200 rounded-full pl-6">
         <Input
           placeholder="Type your message…"
